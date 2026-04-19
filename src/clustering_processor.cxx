@@ -119,6 +119,181 @@ void ClusteringProcessor::readDataSet (const std::string &filename)
     return;
 }
 
+/****************************************************************
+ *                      setClassAttribute                       *
+ ****************************************************************/
+void ClusteringProcessor::setClassAttribute (std::string classAttributeName)
+{
+    for (size_t i = 0; i < dataset.attributes.size (); i++)
+    {
+        if (dataset.attributes[i].name == classAttributeName)
+        {
+            classAttribute = dataset.attributes[i];
+            classAttributeIndex = i;
+            
+            return;
+        }
+    }
+
+    std::cerr << "Error: Class attribute '" << classAttributeName << "' not found in dataset." << std::endl;
+    throw std::invalid_argument("Class attribute not found in dataset.");
+}
+
+/****************************************************************
+ *                     replaceMissingValues                     *
+ ****************************************************************/
+void ClusteringProcessor::replaceMissingValues (replaceMissingStrategy strategy)
+{
+    switch (strategy)
+    {
+        case MEAN_MODE:
+            MEAN_MODE_ReplaceMissingValues();
+            break;
+        
+        default:
+            std::cerr << "Error: Invalid replace missing values strategy." << std::endl;
+            throw std::invalid_argument("Invalid replace missing values strategy.");
+    }
+
+    return;
+}
+
+/****************************************************************
+ *                MEAN_MODE_ReplaceMissingValues                *
+ ****************************************************************/
+void ClusteringProcessor::MEAN_MODE_ReplaceMissingValues ()
+{
+    std::map<std::string, std::vector<double>> counts;
+
+    MEAN_MODE_SetReplacementMap (counts);
+
+    MEAN_MODE_UpdateMissingValueInfo (counts);
+
+    MEAN_MODE_ComputeFinalReplacements (counts);
+
+    return;
+}
+
+/****************************************************************
+ *                  MEAN_MODE_SetReplacementMap                 *
+ ****************************************************************/
+void ClusteringProcessor::MEAN_MODE_SetReplacementMap (std::map<std::string, std::vector<double>> &counts)
+{
+    for (const auto &attribute : dataset.attributes)
+    {
+        switch (attribute.type)
+        {
+            case NUMERIC:
+                counts[attribute.name] = std::vector<double>{0.0, 0.0}; // sum, count
+                break;
+            
+            case NOMINAL:
+                counts[attribute.name] = std::vector<double>(attribute.values.size(), 0.0); // count for each nominal value
+                break;
+
+            default:
+                std::cerr << "Error: Unsupported attribute type for mean/mode replacement." << std::endl;
+                throw std::invalid_argument("Unsupported attribute type for mean/mode replacement.");
+        }
+    }
+
+    return;
+}
+
+/****************************************************************
+ *                MEAN_MODE_UpdateMissingValueInfo              *
+ ****************************************************************/
+void ClusteringProcessor::MEAN_MODE_UpdateMissingValueInfo (std::map<std::string, std::vector<double>> &counts)
+{
+    for (const auto &instance : dataset.data)
+    {
+        const DataInstance &dataInstance = instance;
+        
+        for (size_t attributeIndex = 0; attributeIndex < dataset.attributes.size (); attributeIndex++)
+        {
+            const Attribute &attribute = dataset.attributes[attributeIndex];
+            const std::string &value = dataInstance.values[attributeIndex];
+
+            if (value != "?")
+            {
+                switch (attribute.type)
+                {
+                    case NUMERIC:
+                        counts[attribute.name][0] += std::stod(value); // sum
+                        counts[attribute.name][1] += 1.0; // count
+                        break;
+                    
+                    case NOMINAL:
+                    {
+                        for (size_t valueIndex = 0; valueIndex < attribute.values.size (); valueIndex++)
+                        {
+                            if (attribute.values[valueIndex] == value)
+                                counts[attribute.name][valueIndex] += 1.0;
+                        }
+                        break;
+                    }
+                    default:
+                        std::cerr << "Error: Unsupported attribute type for mean/mode replacement." << std::endl;
+                        throw std::invalid_argument("Unsupported attribute type for mean/mode replacement.");
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+/****************************************************************
+ *              MEAN_MODE_ComputeFinalReplacements              *
+ ****************************************************************/
+void ClusteringProcessor::MEAN_MODE_ComputeFinalReplacements (std::map<std::string, std::vector<double>> &counts)
+{
+    missingValueInfo.values.clear ();
+
+    for (size_t i = 0; i < dataset.attributes.size (); i++)
+    {
+        const Attribute &attribute = dataset.attributes[i];
+
+        if (attribute.type == NUMERIC)
+        {
+            double sum = counts[attribute.name][0];
+            double count = counts[attribute.name][1];
+
+            std::string replacementValue = (count > 0) ? std::to_string(sum / count) : "0.0";
+            missingValueInfo.values.push_back(replacementValue);
+        }
+        else if (attribute.type == NOMINAL)
+        {
+            const std::vector<double> &valueCounts = counts[attribute.name];
+            size_t maxIndex = 0;
+
+            for (size_t valueIndex = 1; valueIndex < valueCounts.size (); valueIndex++)
+            {
+                if (valueCounts[valueIndex] > valueCounts[maxIndex])
+                    maxIndex = valueIndex;
+            }
+            std::string replacementValue = attribute.values[maxIndex];
+            missingValueInfo.values.push_back(replacementValue);
+        }
+        else
+        {
+            missingValueInfo.values.push_back("?");
+            std::cerr << "Warning: Unsupported attribute type for mean/mode replacement. Missing value will remain '?'" << std::endl;
+        }
+    }
+
+    return;
+}
+
+
+
+
+
+
+
+
+
+
 
 
 

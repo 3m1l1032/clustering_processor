@@ -6,6 +6,7 @@
  * Created for Georgetown University Data Mining COSC 3590, Spring 2026.
  * 
  * Hours spent on importing and editing previous code: 1 hour.
+ * Hours spent on adding pre-processing from previous proeject: 0.75 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H
@@ -29,6 +30,10 @@
 #include <filesystem>
 #include <chrono>
 #include <sstream>
+#include <map>
+#include <mutex>
+#include <atomic>
+#include <limits>
 
 #include "../external/arff/include/arff.h"
 
@@ -54,6 +59,16 @@ using arff::NOMINAL;
  *      Strucs, Enums, and Typedefs     *
  *                                      *
  ****************************************/
+enum replaceMissingStrategy
+{
+    MEAN_MODE
+};
+
+struct normalizationStats
+{
+    double mean;
+    double stddev;
+};
 
 
 
@@ -76,6 +91,12 @@ public:
     
     /*  Member Functions  */
     void readDataSet (const std::string &filename);
+    void setClassAttribute (std::string classAttributeName);
+    void replaceMissingValues (replaceMissingStrategy strategy = MEAN_MODE);
+    void normalizeNumericValues ();
+
+    std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
+    std::string getReplacementValue (const size_t attributeIndex) const;
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -84,7 +105,21 @@ private:
     /*  Data Members  */
     ARFF dataset;
 
+    Attribute classAttribute;
+    size_t classAttributeIndex;
+    DataInstance missingValueInfo;
+    std::map<std::string, normalizationStats> normalizationInfo; // attributeName -> stats
+
     /*  Helper Functions  */
+    void MEAN_MODE_ReplaceMissingValues ();
+    void MEAN_MODE_SetReplacementMap (std::map<std::string, std::vector<double>> &counts);
+    void MEAN_MODE_UpdateMissingValueInfo (std::map<std::string, std::vector<double>> &counts);
+    void MEAN_MODE_ComputeFinalReplacements (std::map<std::string, std::vector<double>> &counts);
+
+
+    void ZSCORE_ComputeNormalization ();
+
+    size_t getClassIndex (const std::string &classLabel) const;
 };
 
 

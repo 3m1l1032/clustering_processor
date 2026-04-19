@@ -94,6 +94,7 @@ public:
     void setClassAttribute (std::string classAttributeName);
     void replaceMissingValues (replaceMissingStrategy strategy = MEAN_MODE);
     void normalizeNumericValues ();
+    void printNormalizationInfo () const;
 
     std::string getReplacementValue (const size_t attributeIndex) const;
     std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;

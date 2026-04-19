@@ -327,6 +327,58 @@ void ClusteringProcessor::normalizeNumericValues ()
 }
 
 /****************************************************************
+ *                  printNormalizationInfo                     *
+ ****************************************************************/
+void ClusteringProcessor::printNormalizationInfo () const
+{
+    std::ios oldState (nullptr);
+    oldState.copyfmt (std::cout);
+    std::cout << std::fixed << std::setprecision (6);
+
+    {
+        const std::string heading = " Normalization Information ";
+        const int fill = 71 - static_cast<int> (heading.size ());
+        const int left = fill / 2;
+        const int right = fill - left;
+        std::cout << std::string (left, '=') << heading << std::string (right, '=') << std::endl;
+    }
+
+    std::cout << std::left << std::setw (24) << "Attribute";
+    std::cout << std::setw (18) << "Mean";
+    std::cout << std::setw (18) << "Std Dev";
+    std::cout << std::right << std::endl;
+
+    for (const auto &attribute : dataset.attributes)
+    {
+        if (attribute.type != NUMERIC)
+            continue;
+
+        std::cout << std::left << std::setw (24) << attribute.name;
+
+        auto statsIt = normalizationInfo.find (attribute.name);
+        if (statsIt != normalizationInfo.end ())
+        {
+            std::cout << std::setw (18) << statsIt->second.mean;
+            std::cout << std::setw (18) << statsIt->second.stddev;
+        }
+        else
+        {
+            std::cout << std::setw (18) << "(none)";
+            std::cout << std::setw (18) << "(none)";
+        }
+
+        std::cout << std::right << std::endl;
+    }
+
+    std::cout << std::string (71, '=') << std::endl;
+    std::cout << std::endl;
+
+    std::cout.copyfmt (oldState);
+
+    return;
+}
+
+/****************************************************************
  *                   ZSCORE_ComputeNormalization                *
  ****************************************************************/
 void ClusteringProcessor::ZSCORE_ComputeNormalization ()

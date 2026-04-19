@@ -140,6 +140,20 @@ void ClusteringProcessor::setClassAttribute (std::string classAttributeName)
 }
 
 /****************************************************************
+ *                         getClassIndex                        *
+ ****************************************************************/
+size_t ClusteringProcessor::getClassIndex (const std::string &classLabel) const
+{
+    for (size_t i = 0; i < classAttribute.values.size (); i++)
+    {
+        if (classAttribute.values[i] == classLabel)
+            return i;
+    }
+
+    throw std::invalid_argument("Class label not found in class attribute values.");
+}
+
+/****************************************************************
  *                     replaceMissingValues                     *
  ****************************************************************/
 void ClusteringProcessor::replaceMissingValues (replaceMissingStrategy strategy)
@@ -300,15 +314,139 @@ std::string ClusteringProcessor::getReplacementValue (const size_t attributeInde
     return replacementValue;
 }
 
+/****************************************************************
+ *                    normalizeNumericValues                    *
+ ****************************************************************/
+void ClusteringProcessor::normalizeNumericValues ()
+{
+    normalizationInfo.clear ();
 
+    ZSCORE_ComputeNormalization ();
 
+    return;
+}
 
+/****************************************************************
+ *                   ZSCORE_ComputeNormalization                *
+ ****************************************************************/
+void ClusteringProcessor::ZSCORE_ComputeNormalization ()
+{
+    std::map<std::string, std::vector<double>> accum;
 
+    ZSCORE_SetAccumulationMap (accum);
 
+    ZSCORE_UpdateAccumulationMap (accum);
 
+    ZSCORE_ComputeFinalStats (accum);
 
+    return;
+}
 
+/****************************************************************
+ *                   ZSCORE_SetAccumulationMap                  *
+ ****************************************************************/
+void ClusteringProcessor::ZSCORE_SetAccumulationMap (std::map<std::string, std::vector<double>> &accum)
+{
+    for (const auto &attribute : dataset.attributes)
+    {
+        if (attribute.type == NUMERIC)
+            accum[attribute.name] = std::vector<double> {0.0, 0.0, 0.0};
+    }
 
+    return;
+}
+
+/****************************************************************
+ *                  ZSCORE_UpdateAccumulationMap                *
+ ****************************************************************/
+void ClusteringProcessor::ZSCORE_UpdateAccumulationMap (std::map<std::string, std::vector<double>> &accum)
+{
+    for (const auto &instance : dataset.data)
+    {
+        const DataInstance &dataInstance = instance;
+
+        for (size_t attributeIndex = 0; attributeIndex < dataset.attributes.size (); attributeIndex++)
+        {
+            const Attribute &attribute = dataset.attributes[attributeIndex];
+            const std::string &value = dataInstance.values[attributeIndex];
+
+            if (attribute.type == NUMERIC && value != "?")
+            {
+                double numericValue = std::stod(value);
+                accum[attribute.name][0] += numericValue;
+                accum[attribute.name][1] += numericValue * numericValue;
+                accum[attribute.name][2] += 1.0;
+            }
+        }
+    }
+}
+
+/****************************************************************
+ *                    ZSCORE_ComputeFinalStats                  *
+ ****************************************************************/
+void ClusteringProcessor::ZSCORE_ComputeFinalStats (const std::map<std::string, std::vector<double>> &accum)
+{
+    for (const auto &attribute : dataset.attributes)
+    {
+        if (attribute.type == NUMERIC)
+        {
+            const std::vector<double> &stats = accum[attribute.name];
+            double sum = stats[0];
+            double sumSquares = stats[1];
+            double count = stats[2];
+
+            double mean = 0.0;
+            double stddev = 0.0;
+
+            if (count > 0)
+            {
+                mean = sum / count;
+                double variance = (sumSquares / count) - (mean * mean);
+
+                if (variance < 0.0)
+                    variance = 0.0;
+                
+                stddev = std::sqrt(variance);
+                if (stddev == 0.0)
+                    stddev = 1.0;
+            }
+
+            normalizationInfo[attribute.name] = {mean, stddev};
+        }
+    }
+
+    return;
+}
+
+/****************************************************************
+ *                      getNormalizedValue                      *
+ ****************************************************************/
+std::string ClusteringProcessor::getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const
+{
+    if (rawValue == "?")
+        return rawValue;
+
+    if (attributeIndex >= dataset.attributes.size ())
+        return rawValue;
+
+    const Attribute &attribute = dataset.attributes[attributeIndex];
+    if (attribute.type != NUMERIC)
+        return rawValue;
+
+    auto it = normalizationInfo.find (attribute.name);
+    if (it == normalizationInfo.end ())
+    {
+        std::cerr << "Error: Normalization stats not found for attribute '" << attribute.name << "'." << std::endl;
+        return rawValue;
+    }
+
+    double numericValue = std::stod(rawValue);
+    double mean = it->second.mean;
+    double stddev = it->second.stddev;
+    double zscore = (numericValue - mean) / stddev;
+
+    return std::to_string(zscore);
+}
 
 
 

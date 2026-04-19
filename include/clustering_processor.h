@@ -6,7 +6,7 @@
  * Created for Georgetown University Data Mining COSC 3590, Spring 2026.
  * 
  * Hours spent on importing and editing previous code: 1 hour.
- * Hours spent on adding pre-processing from previous proeject: 0.75 hours.
+ * Hours spent on adding pre-processing from previous proeject: 1.5 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H
@@ -118,6 +118,9 @@ private:
 
 
     void ZSCORE_ComputeNormalization ();
+    void ZSCORE_SetAccumulationMap (std::map<std::string, std::vector<double>> &accum);
+    void ZSCORE_UpdateAccumulationMap (std::map<std::string, std::vector<double>> &accum);
+    void ZSCORE_ComputeFinalStats (const std::map<std::string, std::vector<double>> &accum);
 
     size_t getClassIndex (const std::string &classLabel) const;
 };

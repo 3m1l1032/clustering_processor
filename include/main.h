@@ -22,6 +22,6 @@
 
 #include "clustering_processor.h"
 
-using namespace ClusteringProcessor;
+using namespace ClusteringProcessorNS;
 
 #endif /*  MAIN_H  */

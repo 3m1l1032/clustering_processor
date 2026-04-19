@@ -10,7 +10,7 @@
 
 #include "../include/clustering_processor.h"
 
-namespace ClusteringProcessor
+namespace ClusteringProcessorNS
 {
 
 
@@ -390,7 +390,7 @@ void ClusteringProcessor::ZSCORE_ComputeFinalStats (const std::map<std::string, 
     {
         if (attribute.type == NUMERIC)
         {
-            const std::vector<double> &stats = accum[attribute.name];
+            const std::vector<double> &stats = accum.at (attribute.name);
             double sum = stats[0];
             double sumSquares = stats[1];
             double count = stats[2];
@@ -450,4 +450,4 @@ std::string ClusteringProcessor::getNormalizedValue (const size_t attributeIndex
 
 
 
-} // namespace ClusteringProcessor
+} // namespace ClusteringProcessorNS

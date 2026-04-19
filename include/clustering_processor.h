@@ -38,7 +38,7 @@
 #include "../external/arff/include/arff.h"
 
 
-namespace ClusteringProcessor
+namespace ClusteringProcessorNS
 {
 
 /****************************************
@@ -133,7 +133,7 @@ private:
  ****************************************/
 
 
-} // namespace ClusteringProcessor
+} // namespace ClusteringProcessorNS
 
 #endif /*  CLUSTERING_PROCESSOR_H  */
 

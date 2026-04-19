@@ -285,6 +285,21 @@ void ClusteringProcessor::MEAN_MODE_ComputeFinalReplacements (std::map<std::stri
     return;
 }
 
+/****************************************************************
+ *                      getReplacementValue                     *
+ ****************************************************************/
+std::string ClusteringProcessor::getReplacementValue (const size_t attributeIndex) const
+{
+    std::string replacementValue = "?";
+
+    if (attributeIndex < missingValueInfo.values.size ())
+        replacementValue = missingValueInfo.values[attributeIndex];
+    else
+        std::cerr << "Error: Attribute index out of bounds for missing value replacement." << std::endl;
+    
+    return replacementValue;
+}
+
 
 
 

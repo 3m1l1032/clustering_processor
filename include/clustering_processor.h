@@ -95,8 +95,8 @@ public:
     void replaceMissingValues (replaceMissingStrategy strategy = MEAN_MODE);
     void normalizeNumericValues ();
 
-    std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
     std::string getReplacementValue (const size_t attributeIndex) const;
+    std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
     
     /*  Cleanup Functions  */
     void clearProcessor ();

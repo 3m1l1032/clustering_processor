@@ -591,7 +591,22 @@ double ClusteringProcessor::getEuclideanDistance (const vectorizationInfo &insta
     return std::sqrt(sumSquares);
 }
 
+/****************************************************************
+ *                    run Clustering Algorithm                  *
+ ****************************************************************/
+void ClusteringProcessor::run (size_t k, terminationStrategy termStrategy)
+{
+    // choosing sqrt(n) for clustering
+    shuffleDataInstances (vectorizedData, SEED);
 
+    size_t randInstanceCount = floor(std::sqrt(vectorizedData.size ()));
+
+    if (randInstanceCount < k)
+        randInstanceCount = k;
+
+    // HAC 
+    
+}
 
 
 
@@ -609,7 +624,7 @@ double ClusteringProcessor::getEuclideanDistance (const vectorizationInfo &insta
 /****************************************************************
  *               shuffleDataInstances Function                  *
  ****************************************************************/
-void shuffleDataInstances (std::vector<DataInstance> &dataInstances, size_t seed)
+void shuffleDataInstances (std::vector<vectorizationInfo> &dataInstances, size_t seed)
 {
     static std::mt19937 generator (seed);
     std::shuffle (dataInstances.begin (), dataInstances.end (), generator);

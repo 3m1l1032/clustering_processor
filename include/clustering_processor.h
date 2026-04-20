@@ -7,7 +7,8 @@
  * 
  * Hours spent on importing and editing previous code: 1 hour.
  * Hours spent on adding pre-processing from previous proeject: 1.5 hours.
- * Hours spent on vectorizing instances (encodings from NN): 1 hours.
+ * Hours spent on vectorizing instances (encodings from NN): 1.5 hours.
+ * Hours spent on base clustering algorithm implementation: 0.25 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H
@@ -76,6 +77,12 @@ enum replaceMissingStrategy
     MEAN_MODE
 };
 
+enum terminationStrategy
+{
+    ONE,
+    SSE
+};
+
 struct normalizationStats
 {
     double mean;
@@ -119,6 +126,8 @@ public:
     std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
     vectorizationInfo getVectorizedInstance (const DataInstance &instance) const;
     double getEuclideanDistance (const vectorizationInfo &instance1, const vectorizationInfo &instance2) const;
+
+    void run (size_t k, terminationStrategy termStrategy);
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -156,7 +165,7 @@ private:
  *            Functions                 *
  *                                      *
  ****************************************/
-void shuffleDataInstances (std::vector<DataInstance> &dataInstances, size_t seed = SEED);
+void shuffleDataInstances (std::vector<vectorizationInfo> &dataInstances, size_t seed = SEED);
 
 
 } // namespace ClusteringProcessorNS

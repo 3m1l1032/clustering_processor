@@ -570,9 +570,52 @@ void ClusteringProcessor::getNumFeatures ()
     return;
 }
 
+/****************************************************************
+ *                     getEuclideanDistance                     *
+ ****************************************************************/
+double ClusteringProcessor::getEuclideanDistance (const vectorizationInfo &instance1, const vectorizationInfo &instance2) const
+{
+    if (instance1.vectorizedInstance.size () != instance2.vectorizedInstance.size ())
+    {
+        std::cerr << "Error: Cannot compute Euclidean distance between instances with different feature counts." << std::endl;
+        throw std::invalid_argument("Instances have different feature counts.");
+    }
+
+    double sumSquares = 0.0;
+    for (size_t i = 0; i < instance1.vectorizedInstance.size (); i++)
+    {
+        double diff = instance1.vectorizedInstance[i] - instance2.vectorizedInstance[i];
+        sumSquares += diff * diff;
+    }
+
+    return std::sqrt(sumSquares);
+}
 
 
 
+
+
+
+
+
+/****************************************************************
+ ****************************************************************
+ **                                                            **
+ **            Additional Functions Implementation             **
+ **                                                            **
+ ****************************************************************
+ ****************************************************************/
+
+/****************************************************************
+ *               shuffleDataInstances Function                  *
+ ****************************************************************/
+void shuffleDataInstances (std::vector<DataInstance> &dataInstances, size_t seed)
+{
+    static std::mt19937 generator (seed);
+    std::shuffle (dataInstances.begin (), dataInstances.end (), generator);
+
+    return;
+}
 
 
 

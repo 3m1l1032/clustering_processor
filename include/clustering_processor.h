@@ -36,6 +36,9 @@
 #include <atomic>
 #include <limits>
 
+// shuffling
+#include <random>
+
 #include "../external/arff/include/arff.h"
 
 
@@ -53,6 +56,14 @@ using arff::Attribute;
 using arff::AttributeType;
 using arff::NUMERIC;
 using arff::NOMINAL;
+
+
+/****************************************
+ *                                      *
+ *             Constants                *
+ *                                      *
+ ****************************************/
+const size_t SEED = 42;
 
 
 /****************************************
@@ -107,6 +118,7 @@ public:
     std::string getReplacementValue (const size_t attributeIndex) const;
     std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
     vectorizationInfo getVectorizedInstance (const DataInstance &instance) const;
+    double getEuclideanDistance (const vectorizationInfo &instance1, const vectorizationInfo &instance2) const;
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -144,6 +156,7 @@ private:
  *            Functions                 *
  *                                      *
  ****************************************/
+void shuffleDataInstances (std::vector<DataInstance> &dataInstances, size_t seed = SEED);
 
 
 } // namespace ClusteringProcessorNS

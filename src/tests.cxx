@@ -20,6 +20,17 @@
 
 namespace
 {
+void requireCondition (bool condition, const std::string &message)
+{
+    if (!condition)
+        throw std::runtime_error (message);
+}
+
+void requireNear (double actual, double expected, double epsilon, const std::string &message)
+{
+    if (std::fabs (actual - expected) > epsilon)
+        throw std::runtime_error (message);
+}
 } // namespace
 
 int main ()
@@ -66,19 +77,79 @@ int main ()
         timings.push_back ({"normalizeNumericValues", duration});
 
         std::cout << std::endl;
-        std::cout << "Replacement values by attribute" << std::endl;
+        std::cout << "Testing replacement values" << std::endl;
+        requireCondition (clusterProcessor.getReplacementValue (0) == "38.088000", "Unexpected replacement value for age.");
+        requireCondition (clusterProcessor.getReplacementValue (1) == "Private", "Unexpected replacement value for workclass.");
+        requireCondition (clusterProcessor.getReplacementValue (4) == "10.023000", "Unexpected replacement value for education-num.");
+
+        std::cout << std::endl;
+        std::cout << "Checking normalization info output" << std::endl;
+        std::ostringstream normalizationCapture;
+        std::streambuf *oldCoutBuffer = std::cout.rdbuf (normalizationCapture.rdbuf ());
+        clusterProcessor.printNormalizationInfo ();
+        std::cout.rdbuf (oldCoutBuffer);
+
+        const std::string normalizationOutput = normalizationCapture.str ();
+        requireCondition (normalizationOutput.find ("Normalization Information") != std::string::npos,
+                          "Normalization output heading was not printed.");
+        requireCondition (normalizationOutput.find ("Attribute") != std::string::npos,
+                          "Normalization output table header was not printed.");
+        requireCondition (normalizationOutput.find ("age") != std::string::npos,
+                          "Normalization output did not include the age attribute.");
+        requireCondition (normalizationOutput.find ("38.088000") != std::string::npos,
+                          "Normalization output did not include the expected age mean.");
+
+        std::cout << std::endl;
+        std::cout << "Testing vectorization" << std::endl;
+        clusterProcessor.vectorizeDataInstances ();
+
+        const DataInstance &sampleInstance = rawDataset.data.front ();
+        size_t classIndex = 0;
+        for (size_t attributeIndex = 0; attributeIndex < rawDataset.attributes.size (); attributeIndex++)
+        {
+            if (rawDataset.attributes[attributeIndex].name == "class")
+            {
+                classIndex = attributeIndex;
+                break;
+            }
+        }
+
+        vectorizationInfo actualVector = clusterProcessor.getVectorizedInstance (sampleInstance);
+        vectorizationInfo expectedVector;
+        expectedVector.classLabel = sampleInstance.values[classIndex];
+
         for (size_t attributeIndex = 0; attributeIndex < rawDataset.attributes.size (); attributeIndex++)
         {
             const Attribute &attribute = rawDataset.attributes[attributeIndex];
-            std::cout << "  [" << attributeIndex << "] " << attribute.name << " -> "
-                      << clusterProcessor.getReplacementValue (attributeIndex) << std::endl;
+            if (attribute.name == "class")
+                continue;
+
+            std::string value = sampleInstance.values[attributeIndex];
+            if (value == "?")
+                value = clusterProcessor.getReplacementValue (attributeIndex);
+
+            if (attribute.type == NUMERIC)
+            {
+                expectedVector.vectorizedInstance.push_back (
+                    std::stod (clusterProcessor.getNormalizedValue (attributeIndex, value)));
+            }
+            else if (attribute.type == NOMINAL)
+            {
+                for (const auto &nominalValue : attribute.values)
+                    expectedVector.vectorizedInstance.push_back (value == nominalValue ? 1.0 : 0.0);
+            }
         }
 
-        std::cout << std::endl;
-        std::cout << "Normalization values" << std::endl;
-        clusterProcessor.printNormalizationInfo ();
+        requireCondition (actualVector.classLabel == expectedVector.classLabel,
+                          "Vectorized instance class label does not match the source data.");
+        requireCondition (actualVector.vectorizedInstance.size () == expectedVector.vectorizedInstance.size (),
+                          "Vectorized instance size does not match the expected feature count.");
 
-        std::cout << std::endl;
+        for (size_t index = 0; index < expectedVector.vectorizedInstance.size (); index++)
+        {
+            requireNear (actualVector.vectorizedInstance[index], expectedVector.vectorizedInstance[index], 1e-9,
+                         "Vectorized instance value does not match the expected encoding.");
+        }
         std::cout << "Data preprocessing completed successfully." << std::endl;
 
         std::cout << std::endl;

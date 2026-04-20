@@ -130,7 +130,8 @@ void ClusteringProcessor::setClassAttribute (std::string classAttributeName)
         {
             classAttribute = dataset.attributes[i];
             classAttributeIndex = i;
-            
+            getNumFeatures();
+
             return;
         }
     }
@@ -499,6 +500,79 @@ std::string ClusteringProcessor::getNormalizedValue (const size_t attributeIndex
 
     return std::to_string(zscore);
 }
+
+/****************************************************************
+ *                    vectorizeDataInstances                    *
+ ****************************************************************/
+void ClusteringProcessor::vectorizeDataInstances ()
+{
+    vectorizedData.clear ();
+
+    for (const auto &instance : dataset.data)
+    {
+        vectorizedData.push_back (getVectorizedInstance (instance));
+    }
+    return;
+}
+
+/****************************************************************
+ *                     getVectorizedInstance                    *
+ ****************************************************************/
+vectorizationInfo ClusteringProcessor::getVectorizedInstance (const DataInstance &instance) const
+{
+    vectorizationInfo vectorizedInstance;
+    vectorizedInstance.classLabel = instance.values[classAttributeIndex];
+
+    for (size_t attributeIndex = 0; attributeIndex < dataset.attributes.size (); attributeIndex++)
+    {
+        const Attribute &attribute = dataset.attributes[attributeIndex];
+        std::string value = instance.values[attributeIndex];
+
+        if (attribute.name != classAttribute.name)
+        {
+            if (value == "?")
+                value = getReplacementValue (attributeIndex);
+
+            if (attribute.type == NUMERIC)
+            {
+                std::string normalizedValue = getNormalizedValue (attributeIndex, value);
+                vectorizedInstance.vectorizedInstance.push_back(std::stod(normalizedValue));
+            }
+            else if (attribute.type == NOMINAL)
+            {
+                for (const auto &nominalValue : attribute.values)
+                    vectorizedInstance.vectorizedInstance.push_back(value == nominalValue ? 1.0 : 0.0);
+            }
+        }
+    }
+
+    return vectorizedInstance;
+}
+
+/****************************************************************
+ *                         getNumFeatures                       *
+ ****************************************************************/
+void ClusteringProcessor::getNumFeatures ()
+{
+    numFeatures = 0;
+
+    for (const auto &attribute : dataset.attributes)
+    {
+        if (attribute.name != this->classAttribute.name)
+        {
+            if (attribute.type == NUMERIC)
+                numFeatures += 1;
+            else if (attribute.type == NOMINAL)
+                numFeatures += attribute.values.size ();
+        }
+    }
+
+    return;
+}
+
+
+
+
 
 
 

@@ -7,6 +7,7 @@
  * 
  * Hours spent on importing and editing previous code: 1 hour.
  * Hours spent on adding pre-processing from previous proeject: 1.5 hours.
+ * Hours spent on vectorizing instances (encodings from NN): 1 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H
@@ -70,6 +71,12 @@ struct normalizationStats
     double stddev;
 };
 
+struct vectorizationInfo
+{
+    std::vector<double> vectorizedInstance;
+    std::string classLabel;
+};
+
 
 
 /****************************************
@@ -95,9 +102,11 @@ public:
     void replaceMissingValues (replaceMissingStrategy strategy = MEAN_MODE);
     void normalizeNumericValues ();
     void printNormalizationInfo () const;
+    void vectorizeDataInstances ();
 
     std::string getReplacementValue (const size_t attributeIndex) const;
     std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
+    vectorizationInfo getVectorizedInstance (const DataInstance &instance) const;
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -110,6 +119,8 @@ private:
     size_t classAttributeIndex;
     DataInstance missingValueInfo;
     std::map<std::string, normalizationStats> normalizationInfo; // attributeName -> stats
+    std::vector<vectorizationInfo> vectorizedData;
+    int numFeatures;
 
     /*  Helper Functions  */
     void MEAN_MODE_ReplaceMissingValues ();
@@ -124,6 +135,7 @@ private:
     void ZSCORE_ComputeFinalStats (const std::map<std::string, std::vector<double>> &accum);
 
     size_t getClassIndex (const std::string &classLabel) const;
+    void getNumFeatures ();
 };
 
 

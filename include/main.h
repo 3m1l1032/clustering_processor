@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <chrono>
 #include <filesystem>
+#include <sstream>
 
 #include "clustering_processor.h"
 

@@ -633,8 +633,7 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         clusters.push_back(newCluster);
     }
 
-    int lastClusterSize = clusters.end() -> instances.size ();
-    while (lastClusterSize != randInstanceCount)
+    while (clusterDendrogram.levels.empty () || clusterDendrogram.levels.back ().clusters.size () > 1)
     {
         double minDistance = std::numeric_limits<double>::max ();
         size_t mergeIndex1 = 0;
@@ -691,8 +690,6 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         // Remove the merged cluster
         clusters.erase(clusters.begin () + mergeIndex2);
 
-        lastClusterSize = cluster1.instances.size ();
-
         // Store the current level of the dendrogram
         dendrogramLevel level;
         level.clusters = clusters;
@@ -719,10 +716,14 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         clusterDendrogram.levels.push_back(level);
     }
 
-    clusterDendrogram.levels.reserve (clusterDendrogram.levels.size ()); // index i + 1 is k
     // k-means clustering
     // Approach A (and step one of Approach B)
-    dendrogramLevel kMeansLevel = clusterDendrogram.levels[k - 1];
+    dendrogramLevel kMeansLevel;
+    for (const auto &level : clusterDendrogram.levels)
+    {
+        if (level.clusters.size () == k)
+            kMeansLevel = level;
+    }
 
     for (size_t i = randInstanceCount; i < vectorizedData.size (); i++)
     {
@@ -751,6 +752,10 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
     double SSEChange = std::numeric_limits<double>::max ();
     while (SSEChange > SSE_TERMINATION_THRESHOLD)
     {
+        // Clear instances before reassigning
+        for (auto &cluster : kMeansLevel.clusters)
+            cluster.instances.clear();
+
         for (auto &cluster : kMeansLevel.clusters)
         {
             vectorizationInfo newCentroid;

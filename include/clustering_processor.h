@@ -8,7 +8,7 @@
  * Hours spent on importing and editing previous code: 1 hour.
  * Hours spent on adding pre-processing from previous proeject: 1.5 hours.
  * Hours spent on vectorizing instances (encodings from NN): 1.5 hours.
- * Hours spent on base clustering algorithm implementation: 1.25 hours.
+ * Hours spent on base clustering algorithm implementation: 1.5 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H

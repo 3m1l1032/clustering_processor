@@ -101,7 +101,11 @@ int main ()
 
         std::cout << std::endl;
         std::cout << "Testing vectorization" << std::endl;
+        start = std::chrono::high_resolution_clock::now ();
         clusterProcessor.vectorizeDataInstances ();
+        end = std::chrono::high_resolution_clock::now ();
+        duration = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        timings.push_back ({"vectorizeDataInstances", duration});
 
         const DataInstance &sampleInstance = rawDataset.data.front ();
         size_t classIndex = 0;

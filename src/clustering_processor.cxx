@@ -592,9 +592,26 @@ double ClusteringProcessor::getEuclideanDistance (const vectorizationInfo &insta
 }
 
 /****************************************************************
+ *                           getSSE                             *
+ ****************************************************************/
+double ClusteringProcessor::getSSE (const std::vector<clusterInfo> &clusters) const
+{
+    double sse = 0.0;
+    for (const auto &cluster : clusters)
+    {
+        for (const auto &instance : cluster.instances)
+        {
+            double distance = getEuclideanDistance (instance, cluster.centroid);
+            sse += distance * distance;
+        }
+    }
+    return sse;
+}
+
+/****************************************************************
  *                    run Clustering Algorithm                  *
  ****************************************************************/
-void ClusteringProcessor::run (size_t k, terminationStrategy termStrategy)
+dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStrategy)
 {
     // choosing sqrt(n) for clustering
     shuffleDataInstances (vectorizedData, SEED);
@@ -605,7 +622,190 @@ void ClusteringProcessor::run (size_t k, terminationStrategy termStrategy)
         randInstanceCount = k;
 
     // HAC 
-    
+    clusterDendrogram.levels.clear ();
+    std::vector<clusterInfo> clusters;
+
+    for (size_t i = 0; i < randInstanceCount; i++)
+    {
+        clusterInfo newCluster;
+        newCluster.instances.push_back(vectorizedData[i]);
+        newCluster.centroid = vectorizedData[i];
+        clusters.push_back(newCluster);
+    }
+
+    int lastClusterSize = clusters.end() -> instances.size ();
+    while (lastClusterSize != randInstanceCount)
+    {
+        double minDistance = std::numeric_limits<double>::max ();
+        size_t mergeIndex1 = 0;
+        size_t mergeIndex2 = 0;
+
+        for (size_t i = 0; i < clusters.size (); i++)
+        {
+            for (size_t j = i + 1; j < clusters.size (); j++)
+            {
+                double distance = getEuclideanDistance (clusters[i].centroid, clusters[j].centroid);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    mergeIndex1 = i;
+                    mergeIndex2 = j;
+                }
+            }
+        }
+
+        // Merge the closest clusters
+        clusterInfo &cluster1 = clusters[mergeIndex1];
+        clusterInfo &cluster2 = clusters[mergeIndex2];
+
+        cluster1.instances.insert(cluster1.instances.end (), cluster2.instances.begin (), cluster2.instances.end ());
+        
+        // Recompute centroid
+        vectorizationInfo newCentroid;
+        std::map<std::string, double> classCounts;
+        for (const auto &instance : cluster1.instances)
+        {
+            classCounts[instance.classLabel] += 1.0;
+        }
+        size_t maxCount = 0;
+        for (const auto &entry : classCounts)
+        {
+            if (entry.second > maxCount)
+            {
+                maxCount = entry.second;
+                newCentroid.classLabel = entry.first;
+            }
+        }
+
+        for (size_t featureIndex = 0; featureIndex < cluster1.centroid.vectorizedInstance.size (); featureIndex++)
+        {
+            double sumFeatureValue = 0.0;
+            for (const auto &instance : cluster1.instances)
+            {
+                sumFeatureValue += instance.vectorizedInstance[featureIndex];
+            }
+            newCentroid.vectorizedInstance.push_back(sumFeatureValue / cluster1.instances.size ());
+        }
+        cluster1.centroid = newCentroid;
+
+        // Remove the merged cluster
+        clusters.erase(clusters.begin () + mergeIndex2);
+
+        lastClusterSize = cluster1.instances.size ();
+
+        // Store the current level of the dendrogram
+        dendrogramLevel level;
+        level.clusters = clusters;
+
+        // Calculate inter-cluster and intra-cluster distances for the current level
+        for (size_t i = 0; i < clusters.size (); i++)
+        {
+            for (size_t j = i + 1; j < clusters.size (); j++)
+            {
+                double distance = getEuclideanDistance (clusters[i].centroid, clusters[j].centroid);
+                level.interClusterDistances.push_back(distance);
+            }
+            double intraDistances = 0.0;
+            for (size_t m = 0; m < clusters[i].instances.size (); m++)
+            {
+                for (size_t n = m + 1; n < clusters[i].instances.size (); n++)
+                {
+                    intraDistances += getEuclideanDistance (clusters[i].instances[m], clusters[i].instances[n]);
+                }
+                intraDistances /= (clusters[i].instances.size () * (clusters[i].instances.size () - 1)) / 2;
+            }
+            level.intraClusterDistances.push_back(intraDistances);
+        }
+        clusterDendrogram.levels.push_back(level);
+    }
+
+    clusterDendrogram.levels.reserve (clusterDendrogram.levels.size ()); // index i + 1 is k
+    // k-means clustering
+    // Approach A (and step one of Approach B)
+    dendrogramLevel kMeansLevel = clusterDendrogram.levels[k - 1];
+
+    for (size_t i = randInstanceCount; i < vectorizedData.size (); i++)
+    {
+        const vectorizationInfo &instance = vectorizedData[i];
+        double minDistance = std::numeric_limits<double>::max ();
+        size_t closestClusterIndex = 0;
+
+        for (size_t clusterIndex = 0; clusterIndex < kMeansLevel.clusters.size (); clusterIndex++)
+        {
+            double distance = getEuclideanDistance (instance, kMeansLevel.clusters[clusterIndex].centroid);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                closestClusterIndex = clusterIndex;
+            }
+        }
+
+        kMeansLevel.clusters[closestClusterIndex].instances.push_back(instance);
+    }
+
+    if (termStrategy == ONE)
+        return kMeansLevel;
+
+    // Approach B
+    kMeansLevel.SSEs.push_back (getSSE (kMeansLevel.clusters));
+    double SSEChange = std::numeric_limits<double>::max ();
+    while (SSEChange > SSE_TERMINATION_THRESHOLD)
+    {
+        for (auto &cluster : kMeansLevel.clusters)
+        {
+            vectorizationInfo newCentroid;
+            std::map<std::string, double> classCounts;
+            for (const auto &instance : cluster.instances)
+            {
+                classCounts[instance.classLabel] += 1.0;
+            }
+            size_t maxCount = 0;
+            for (const auto &entry : classCounts)
+            {
+                if (entry.second > maxCount)
+                {
+                    maxCount = entry.second;
+                    newCentroid.classLabel = entry.first;
+                }
+            }
+
+            for (size_t featureIndex = 0; featureIndex < cluster.centroid.vectorizedInstance.size (); featureIndex++)
+            {
+                double sumFeatureValue = 0.0;
+                for (const auto &instance : cluster.instances)
+                {
+                    sumFeatureValue += instance.vectorizedInstance[featureIndex];
+                }
+                newCentroid.vectorizedInstance.push_back(sumFeatureValue / cluster.instances.size ());
+            }
+            cluster.centroid = newCentroid;
+        }
+
+        for (size_t i = 0; i < vectorizedData.size (); i++)
+        {
+            const vectorizationInfo &instance = vectorizedData[i];
+            double minDistance = std::numeric_limits<double>::max ();
+            size_t closestClusterIndex = 0;
+
+            for (size_t clusterIndex = 0; clusterIndex < kMeansLevel.clusters.size (); clusterIndex++)
+            {
+                double distance = getEuclideanDistance (instance, kMeansLevel.clusters[clusterIndex].centroid);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    closestClusterIndex = clusterIndex;
+                }
+            }
+
+            kMeansLevel.clusters[closestClusterIndex].instances.push_back(instance);
+        }
+
+        double newSSE = getSSE (kMeansLevel.clusters);
+        SSEChange = std::abs(kMeansLevel.SSEs.back () - newSSE);
+        kMeansLevel.SSEs.push_back(newSSE);
+    }
+
+    return kMeansLevel;
 }
 
 

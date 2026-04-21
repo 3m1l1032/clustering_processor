@@ -8,7 +8,7 @@
  * Hours spent on importing and editing previous code: 1 hour.
  * Hours spent on adding pre-processing from previous proeject: 1.5 hours.
  * Hours spent on vectorizing instances (encodings from NN): 1.5 hours.
- * Hours spent on base clustering algorithm implementation: 0.25 hours.
+ * Hours spent on base clustering algorithm implementation: 1.25 hours.
  */
 
 #ifndef CLUSTERING_PROCESSOR_H
@@ -65,6 +65,7 @@ using arff::NOMINAL;
  *                                      *
  ****************************************/
 const size_t SEED = 42;
+const double SSE_TERMINATION_THRESHOLD = 1e-3;
 
 
 /****************************************
@@ -95,7 +96,24 @@ struct vectorizationInfo
     std::string classLabel;
 };
 
+struct clusterInfo
+{
+    std::vector<vectorizationInfo> instances;
+    vectorizationInfo centroid;
+};
 
+struct dendrogramLevel
+{
+    std::vector<clusterInfo> clusters;
+    std::vector<double> interClusterDistances;
+    std::vector<double> intraClusterDistances;
+    std::vector<double> SSEs;
+};
+
+struct dendrogram
+{
+    std::vector<dendrogramLevel> levels;
+};
 
 /****************************************
  *                                      *
@@ -126,8 +144,9 @@ public:
     std::string getNormalizedValue (const size_t attributeIndex, const std::string &rawValue) const;
     vectorizationInfo getVectorizedInstance (const DataInstance &instance) const;
     double getEuclideanDistance (const vectorizationInfo &instance1, const vectorizationInfo &instance2) const;
+    double getSSE (const std::vector<clusterInfo> &clusters) const;
 
-    void run (size_t k, terminationStrategy termStrategy);
+    dendrogramLevel run (size_t k, terminationStrategy termStrategy);
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -142,6 +161,7 @@ private:
     std::map<std::string, normalizationStats> normalizationInfo; // attributeName -> stats
     std::vector<vectorizationInfo> vectorizedData;
     int numFeatures;
+    dendrogram clusterDendrogram;
 
     /*  Helper Functions  */
     void MEAN_MODE_ReplaceMissingValues ();

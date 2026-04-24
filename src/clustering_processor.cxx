@@ -672,7 +672,7 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         {
             classCounts[instance.classLabel] += 1.0;
         }
-        size_t maxCount = 0;
+        double maxCount = 0.0;
         for (const auto &entry : classCounts)
         {
             if (entry.second > maxCount)
@@ -735,6 +735,9 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
     if (termStrategy == ONE)
         return kMeansLevel;
 
+    if (termStrategy != SSE)
+        throw std::invalid_argument("Invalid termination strategy for clustering algorithm.");
+
     // Approach B
     kMeansLevel.SSEs.push_back (getSSE (kMeansLevel.clusters));
     double SSEChange = std::numeric_limits<double>::max ();
@@ -781,7 +784,7 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
             for (const auto &instance : cluster.instances)
                 classCounts[instance.classLabel] += 1.0;
 
-            size_t maxCount = 0;
+            double maxCount = 0.0;
             for (const auto &entry : classCounts)
             {
                 if (entry.second > maxCount)
@@ -818,8 +821,8 @@ void ClusteringProcessor::calculateDistances (dendrogramLevel &level)
 {
     double totalIntraDistance = 0.0;
     double totalInterDistance = 0.0;
-    int intraCount = 0;
-    int interCount = 0;
+    size_t intraCount = 0;
+    size_t interCount = 0;
 
     for (size_t i = 0; i < level.clusters.size (); i++)
     {

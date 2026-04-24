@@ -84,6 +84,13 @@ void ClusteringProcessor::copyProcessor (const ClusteringProcessor &other)
     try
     {
         this->dataset = other.dataset;
+        this->classAttribute = other.classAttribute;
+        this->classAttributeIndex = other.classAttributeIndex;
+        this->missingValueInfo = other.missingValueInfo;
+        this->normalizationInfo = other.normalizationInfo;
+        this->vectorizedData = other.vectorizedData;
+        this->numFeatures = other.numFeatures;
+        this->clusterDendrogram = other.clusterDendrogram;
     }
     catch (const std::exception &e)
     {
@@ -933,6 +940,107 @@ void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) co
     return;
 }
 
+/****************************************************************
+ *                   getTerminationStrategyName                 *
+ ****************************************************************/
+std::string ClusteringProcessor::getTerminationStrategyName (terminationStrategy strategy) const
+{
+    if (strategy == ONE)
+        return "ONE";
+
+    if (strategy == SSE)
+        return "SSE";
+
+    return "UNKNOWN";
+}
+
+/****************************************************************
+ *                     saveDendrogramLevel                      *
+ ****************************************************************/
+std::string ClusteringProcessor::saveDendrogramLevel (const dendrogramLevel &level,
+                                                      terminationStrategy termStrategy,
+                                                      size_t k,
+                                                      const std::string &outputDir) const
+{
+    std::filesystem::create_directories (outputDir);
+
+    const auto now = std::chrono::system_clock::now ();
+    const std::time_t nowTime = std::chrono::system_clock::to_time_t (now);
+
+    std::tm localTime {};
+#ifdef _WIN32
+    localtime_s (&localTime, &nowTime);
+#else
+    localtime_r (&nowTime, &localTime);
+#endif
+
+    std::ostringstream timestamp;
+    timestamp << std::put_time (&localTime, "%Y%m%d_%H%M%S");
+    const long long micros = std::chrono::duration_cast<std::chrono::microseconds> (now.time_since_epoch ()).count () % 1000000;
+    timestamp << "_" << std::setw (6) << std::setfill ('0') << micros;
+
+    const std::string filename = timestamp.str () + "_" + getTerminationStrategyName (termStrategy) + "_k" + std::to_string (k) + ".out";
+    const std::filesystem::path outputPath = std::filesystem::path (outputDir) / filename;
+
+    std::ofstream outFile (outputPath.string ());
+    if (!outFile.is_open ())
+        throw std::runtime_error ("Could not create output file: " + outputPath.string ());
+
+    outFile << "k = " << k << "\n";
+    outFile << "terminationStrategy = " << getTerminationStrategyName (termStrategy) << "\n";
+    outFile << "clusters = " << level.clusters.size () << "\n\n";
+
+    outFile << "Final cluster class distribution:\n";
+    for (size_t i = 0; i < level.clusters.size (); i++)
+    {
+        std::map<std::string, size_t> classCounts;
+        for (const auto &instance : level.clusters[i].instances)
+            classCounts[instance.classLabel] += 1;
+
+        outFile << "  Cluster " << i + 1 << " size=" << level.clusters[i].instances.size () << " -> ";
+
+        bool first = true;
+        for (const auto &entry : classCounts)
+        {
+            if (!first)
+                outFile << ", ";
+            outFile << entry.first << "=" << entry.second;
+            first = false;
+        }
+
+        if (first)
+            outFile << "(none)";
+
+        outFile << "\n";
+    }
+
+    outFile << "\nIteration metrics:\n";
+    const size_t rows = std::max (level.intraClusterDistances.size (), level.interClusterDistances.size ());
+    for (size_t i = 0; i < rows; i++)
+    {
+        outFile << "  Iteration " << i + 1 << ": ";
+
+        if (i < level.intraClusterDistances.size ())
+            outFile << "intra=" << level.intraClusterDistances[i] << ", ";
+        else
+            outFile << "intra=n/a, ";
+
+        if (i < level.interClusterDistances.size ())
+            outFile << "inter=" << level.interClusterDistances[i] << ", ";
+        else
+            outFile << "inter=n/a, ";
+
+        if (i < level.SSEs.size ())
+            outFile << "SSE=" << level.SSEs[i];
+        else
+            outFile << "SSE=n/a";
+
+        outFile << "\n";
+    }
+
+    return outputPath.string ();
+}
+
 
 /****************************************************************
  ****************************************************************
@@ -947,7 +1055,7 @@ void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) co
  ****************************************************************/
 void shuffleDataInstances (std::vector<vectorizationInfo> &dataInstances, size_t seed)
 {
-    static std::mt19937 generator (seed);
+    thread_local std::mt19937 generator (seed);
     std::shuffle (dataInstances.begin (), dataInstances.end (), generator);
 
     return;

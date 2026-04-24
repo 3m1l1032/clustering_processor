@@ -156,6 +156,10 @@ public:
     dendrogramLevel run (size_t k, terminationStrategy termStrategy);
     void calculateDistances (dendrogramLevel &level);
     void printDendrogramLevel (const dendrogramLevel &level) const;
+    std::string saveDendrogramLevel (const dendrogramLevel &level,
+                                     terminationStrategy termStrategy,
+                                     size_t k,
+                                     const std::string &outputDir = "results") const;
     
     /*  Cleanup Functions  */
     void clearProcessor ();
@@ -186,6 +190,7 @@ private:
 
     size_t getClassIndex (const std::string &classLabel) const;
     void getNumFeatures ();
+    std::string getTerminationStrategyName (terminationStrategy strategy) const;
 };
 
 

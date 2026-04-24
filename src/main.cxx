@@ -24,6 +24,7 @@ struct ExperimentResult
     std::vector<double> interByIteration;
     std::vector<double> intraByIteration;
     std::vector<double> sseByIteration;
+    std::vector<std::vector<clusterComposition>> compositionByIteration;
     std::string savedFile;
 };
 
@@ -77,6 +78,7 @@ ExperimentResult runOneExperiment (const ClusteringProcessor &preprocessedProces
     result.interByIteration = level.interClusterDistances;
     result.intraByIteration = level.intraClusterDistances;
     result.sseByIteration = level.SSEs;
+    result.compositionByIteration = level.iterationClusterCompositions;
 
     if (!level.interClusterDistances.empty ())
         result.finalInterDistance = level.interClusterDistances.back ();
@@ -146,10 +148,42 @@ void printOneResult (const ExperimentResult &result)
     }
 
     std::cout << "Iteration metrics:" << std::endl;
-    const size_t rows = std::max (result.interByIteration.size (), result.intraByIteration.size ());
+    size_t rows = std::max (result.interByIteration.size (), result.intraByIteration.size ());
+    if (result.sseByIteration.size () > rows)
+        rows = result.sseByIteration.size ();
+    if (result.compositionByIteration.size () > rows)
+        rows = result.compositionByIteration.size ();
+
     for (size_t i = 0; i < rows; i++)
     {
-        std::cout << "  Iteration " << i + 1 << ": ";
+        std::cout << "  Iteration " << i + 1 << ":" << std::endl;
+
+        if (i < result.compositionByIteration.size ())
+        {
+            const auto &composition = result.compositionByIteration[i];
+            for (size_t clusterIndex = 0; clusterIndex < composition.size (); clusterIndex++)
+            {
+                std::cout << "    Cluster " << clusterIndex + 1
+                          << " size=" << composition[clusterIndex].clusterSize
+                          << " | class counts: ";
+
+                bool first = true;
+                for (const auto &entry : composition[clusterIndex].classCounts)
+                {
+                    if (!first)
+                        std::cout << ", ";
+                    std::cout << entry.first << "=" << entry.second;
+                    first = false;
+                }
+
+                if (first)
+                    std::cout << "(none)";
+
+                std::cout << std::endl;
+            }
+        }
+
+        std::cout << "    ";
 
         if (i < result.interByIteration.size ())
             std::cout << "inter=" << result.interByIteration[i] << ", ";

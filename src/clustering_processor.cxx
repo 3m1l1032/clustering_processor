@@ -744,6 +744,8 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         kMeansLevel.clusters[closestClusterIndex].instances.push_back(instance);
     }
 
+    calculateDistances (kMeansLevel);
+
     if (termStrategy == ONE)
         return kMeansLevel;
 
@@ -808,14 +810,67 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         double newSSE = getSSE (kMeansLevel.clusters);
         SSEChange = std::abs(kMeansLevel.SSEs.back () - newSSE);
         kMeansLevel.SSEs.push_back(newSSE);
+        calculateDistances (kMeansLevel);
     }
 
     return kMeansLevel;
 }
 
+/****************************************************************
+ *                     calculateDistances                       *
+ ****************************************************************/
+void ClusteringProcessor::calculateDistances (dendrogramLevel &level)
+{
+    double totalIntraDistance = 0.0;
+    double totalInterDistance = 0.0;
+    int intraCount = 0;
+    int interCount = 0;
 
+    for (size_t i = 0; i < level.clusters.size (); i++)
+    {
+        for (size_t j = i + 1; j < level.clusters.size (); j++)
+        {
+            totalInterDistance += getEuclideanDistance (level.clusters[i].centroid, level.clusters[j].centroid);
+            interCount++;
+        }
 
+        for (size_t m = 0; m < level.clusters[i].instances.size (); m++)
+        {
+            for (size_t n = m + 1; n < level.clusters[i].instances.size (); n++)
+            {
+                totalIntraDistance += getEuclideanDistance (level.clusters[i].instances[m], level.clusters[i].instances[n]);
+                intraCount++;
+            }
+        }
+    }
 
+    level.interClusterDistances.push_back(interCount > 0 ? totalInterDistance / interCount : 0.0);
+    level.intraClusterDistances.push_back(intraCount > 0 ? totalIntraDistance / intraCount : 0.0);
+
+    return;
+}
+
+/****************************************************************
+ *                     printDendrogramLevel                     *
+ ****************************************************************/
+void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) const
+{
+    std::cout << "Dendrogram Level with " << level.clusters.size () << " clusters:" << std::endl;
+    for (size_t i = 0; i < level.clusters.size (); i++)
+    {
+        std::cout << "  Cluster " << i + 1 << ": " << level.clusters[i].instances.size () << " instances" << std::endl;
+    }
+    for (size_t i = 0; i < level.interClusterDistances.size (); i++)
+    {
+        std::cout << "  Iteration " << i + 1 << ":" << std::endl;
+        std::cout << "  Intra-cluster distance: " << level.intraClusterDistances[i] << std::endl;
+        std::cout << "  Inter-cluster distance: " << level.interClusterDistances[i] << std::endl;
+        if (!level.SSEs.empty ())
+            std::cout << "  SSE: " << level.SSEs[i] << std::endl;
+    }
+
+    return;
+}
 
 
 /****************************************************************

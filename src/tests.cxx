@@ -31,6 +31,118 @@ void requireNear (double actual, double expected, double epsilon, const std::str
     if (std::fabs (actual - expected) > epsilon)
         throw std::runtime_error (message);
 }
+
+size_t findFirstAttributeOfType (const ARFF &dataset, AttributeType type, const std::string &excludedName = "")
+{
+    for (size_t attributeIndex = 0; attributeIndex < dataset.attributes.size (); attributeIndex++)
+    {
+        const Attribute &attribute = dataset.attributes[attributeIndex];
+        if (attribute.type == type && attribute.name != excludedName)
+            return attributeIndex;
+    }
+
+    throw std::runtime_error ("Requested attribute type not found in dataset.");
+}
+
+std::string computeExpectedReplacementValue (const ARFF &dataset, size_t attributeIndex)
+{
+    const Attribute &attribute = dataset.attributes[attributeIndex];
+
+    if (attribute.type == NUMERIC)
+    {
+        double sum = 0.0;
+        double count = 0.0;
+        for (const auto &instance : dataset.data)
+        {
+            const std::string &value = instance.values[attributeIndex];
+            if (value == "?")
+                continue;
+
+            sum += std::stod (value);
+            count += 1.0;
+        }
+
+        return (count > 0.0) ? std::to_string (sum / count) : "0.0";
+    }
+
+    if (attribute.type == NOMINAL)
+    {
+        std::vector<double> counts (attribute.values.size (), 0.0);
+        for (const auto &instance : dataset.data)
+        {
+            const std::string &value = instance.values[attributeIndex];
+            if (value == "?")
+                continue;
+
+            for (size_t valueIndex = 0; valueIndex < attribute.values.size (); valueIndex++)
+            {
+                if (attribute.values[valueIndex] == value)
+                    counts[valueIndex] += 1.0;
+            }
+        }
+
+        size_t maxIndex = 0;
+        for (size_t valueIndex = 1; valueIndex < counts.size (); valueIndex++)
+        {
+            if (counts[valueIndex] > counts[maxIndex])
+                maxIndex = valueIndex;
+        }
+
+        return attribute.values[maxIndex];
+    }
+
+    throw std::runtime_error ("Unsupported attribute type for expected replacement computation.");
+}
+
+std::string formatFixed6 (double value)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision (6) << value;
+    return stream.str ();
+}
+
+struct runCaseResult
+{
+    std::string name;
+    size_t k;
+    terminationStrategy strategy;
+    dendrogramLevel level;
+    long long durationMicros;
+};
+
+void requireRunLevelIntegrity (const runCaseResult &result, size_t expectedDatasetSize)
+{
+    requireCondition (result.level.clusters.size () == result.k,
+                      "Run method produced an unexpected cluster count for " + result.name + ".");
+
+    size_t totalAssignedInstances = 0;
+    for (const auto &cluster : result.level.clusters)
+    {
+        totalAssignedInstances += cluster.instances.size ();
+
+        if (!cluster.instances.empty ())
+        {
+            requireCondition (
+                cluster.centroid.vectorizedInstance.size () == cluster.instances[0].vectorizedInstance.size (),
+                "Centroid dimensionality mismatch detected for " + result.name + ".");
+        }
+    }
+
+    requireCondition (totalAssignedInstances == expectedDatasetSize,
+                      "Run method did not assign every instance exactly once for " + result.name + ".");
+
+    requireCondition (!result.level.interClusterDistances.empty (),
+                      "Run method should populate inter-cluster distances for " + result.name + ".");
+    requireCondition (!result.level.intraClusterDistances.empty (),
+                      "Run method should populate intra-cluster distances for " + result.name + ".");
+
+    if (result.strategy == SSE)
+    {
+        requireCondition (!result.level.SSEs.empty (),
+                          "SSE strategy should record SSE history for " + result.name + ".");
+    }
+}
+
 } // namespace
 
 int main ()
@@ -43,7 +155,7 @@ int main ()
         std::cout << "Clustering Processor Test File" << std::endl;
         std::cout << std::endl;
 
-        std::string filename = "data/adult-small.arff";
+        std::string filename = "data/adult-big.arff";
         ARFF rawDataset (filename);
 
         std::vector<std::pair<std::string, long long>> timings;
@@ -99,9 +211,27 @@ int main ()
 
         std::cout << std::endl;
         std::cout << "Testing replacement values" << std::endl;
-        requireCondition (clusterProcessor.getReplacementValue (0) == "38.088000", "Unexpected replacement value for age.");
-        requireCondition (clusterProcessor.getReplacementValue (1) == "Private", "Unexpected replacement value for workclass.");
-        requireCondition (clusterProcessor.getReplacementValue (4) == "10.023000", "Unexpected replacement value for education-num.");
+        size_t numericAttributeIndex = findFirstAttributeOfType (rawDataset, NUMERIC, "class");
+        size_t nominalAttributeIndex = findFirstAttributeOfType (rawDataset, NOMINAL, "class");
+        size_t secondAttributeIndex = rawDataset.attributes.size ();
+        for (size_t attributeIndex = nominalAttributeIndex + 1; attributeIndex < rawDataset.attributes.size (); attributeIndex++)
+        {
+            if (rawDataset.attributes[attributeIndex].type == NOMINAL && rawDataset.attributes[attributeIndex].name != "class")
+            {
+                secondAttributeIndex = attributeIndex;
+                break;
+            }
+        }
+
+        requireCondition (clusterProcessor.getReplacementValue (numericAttributeIndex) == computeExpectedReplacementValue (rawDataset, numericAttributeIndex),
+                          "Unexpected replacement value for first numeric attribute.");
+        requireCondition (clusterProcessor.getReplacementValue (nominalAttributeIndex) == computeExpectedReplacementValue (rawDataset, nominalAttributeIndex),
+                          "Unexpected replacement value for first nominal attribute.");
+        if (secondAttributeIndex < rawDataset.attributes.size ())
+        {
+            requireCondition (clusterProcessor.getReplacementValue (secondAttributeIndex) == computeExpectedReplacementValue (rawDataset, secondAttributeIndex),
+                              "Unexpected replacement value for second nominal attribute.");
+        }
 
         std::cout << std::endl;
         std::cout << "Testing getNormalizedValue guard behavior" << std::endl;
@@ -144,10 +274,25 @@ int main ()
                           "Normalization output heading was not printed.");
         requireCondition (normalizationOutput.find ("Attribute") != std::string::npos,
                           "Normalization output table header was not printed.");
-        requireCondition (normalizationOutput.find ("age") != std::string::npos,
-                          "Normalization output did not include the age attribute.");
-        requireCondition (normalizationOutput.find ("38.088000") != std::string::npos,
-                          "Normalization output did not include the expected age mean.");
+        const std::string numericAttributeName = rawDataset.attributes[numericAttributeIndex].name;
+        requireCondition (normalizationOutput.find (numericAttributeName) != std::string::npos,
+                          "Normalization output did not include the first numeric attribute.");
+
+        double numericSum = 0.0;
+        double numericCount = 0.0;
+        for (const auto &instance : rawDataset.data)
+        {
+            const std::string &value = instance.values[numericAttributeIndex];
+            if (value == "?")
+                continue;
+
+            numericSum += std::stod (value);
+            numericCount += 1.0;
+        }
+
+        const double expectedNumericMean = numericCount > 0.0 ? numericSum / numericCount : 0.0;
+        requireCondition (normalizationOutput.find (formatFixed6 (expectedNumericMean)) != std::string::npos,
+                          "Normalization output did not include the expected first numeric attribute mean.");
         end = std::chrono::high_resolution_clock::now ();
         duration = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
         timings.push_back ({"normalizationOutputCheck", duration});
@@ -311,82 +456,96 @@ int main ()
         std::cout << std::endl;
         std::cout << "Testing run method with ONE termination strategy" << std::endl;
         start = std::chrono::high_resolution_clock::now ();
-        dendrogramLevel resultOne = clusterProcessor.run (2, ONE);
+        runCaseResult runOneResult;
+        runOneResult.name = "runMethodONE_k2";
+        runOneResult.k = 2;
+        runOneResult.strategy = ONE;
+        runOneResult.level = clusterProcessor.run (2, ONE);
         end = std::chrono::high_resolution_clock::now ();
-        duration = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        runOneResult.durationMicros = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        duration = runOneResult.durationMicros;
         timings.push_back ({"runMethodONE", duration});
+        requireRunLevelIntegrity (runOneResult, rawDataset.data.size ());
 
-        requireCondition (resultOne.clusters.size () == 2,
-                          "Run method with k=2 should produce exactly 2 clusters.");
-        requireCondition (!resultOne.interClusterDistances.empty (),
-                          "Run method should populate inter-cluster distances.");
-        requireCondition (!resultOne.intraClusterDistances.empty (),
-                          "Run method should populate intra-cluster distances.");
-
-        size_t totalInstancesOne = 0;
-        for (const auto &cluster : resultOne.clusters)
-        {
-            totalInstancesOne += cluster.instances.size ();
-            if (!cluster.instances.empty ())
-            {
-                requireCondition (cluster.centroid.vectorizedInstance.size () == cluster.instances[0].vectorizedInstance.size (),
-                                  "Centroid should have same dimensionality as instances.");
-            }
-        }
-        requireCondition (totalInstancesOne > 0,
-                          "Run method should assign instances to clusters.");
+        runCaseResult runK1Result;
+        std::cout << std::endl;
+        std::cout << "Testing run method with k=1 edge case" << std::endl;
+        start = std::chrono::high_resolution_clock::now ();
+        runK1Result.name = "runMethodONE_k1";
+        runK1Result.k = 1;
+        runK1Result.strategy = ONE;
+        runK1Result.level = clusterProcessor.run (1, ONE);
+        end = std::chrono::high_resolution_clock::now ();
+        runK1Result.durationMicros = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        duration = runK1Result.durationMicros;
+        timings.push_back ({"runMethodK1", duration});
+        requireRunLevelIntegrity (runK1Result, rawDataset.data.size ());
 
         std::cout << std::endl;
         std::cout << "Testing run method with SSE termination strategy" << std::endl;
         start = std::chrono::high_resolution_clock::now ();
-        dendrogramLevel resultSSE = clusterProcessor.run (3, SSE);
+        runCaseResult runSSEResult;
+        runSSEResult.name = "runMethodSSE_k3";
+        runSSEResult.k = 3;
+        runSSEResult.strategy = SSE;
+        runSSEResult.level = clusterProcessor.run (3, SSE);
         end = std::chrono::high_resolution_clock::now ();
-        duration = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        runSSEResult.durationMicros = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        duration = runSSEResult.durationMicros;
         timings.push_back ({"runMethodSSE", duration});
+        requireRunLevelIntegrity (runSSEResult, rawDataset.data.size ());
 
-        requireCondition (resultSSE.clusters.size () == 3,
-                          "Run method with k=3 should produce exactly 3 clusters.");
-        requireCondition (!resultSSE.SSEs.empty (),
-                          "Run method with SSE strategy should populate SSE values.");
-
-        size_t totalInstancesSSE = 0;
-        for (const auto &cluster : resultSSE.clusters)
-        {
-            totalInstancesSSE += cluster.instances.size ();
-            if (!cluster.instances.empty ())
-            {
-                requireCondition (cluster.centroid.vectorizedInstance.size () == cluster.instances[0].vectorizedInstance.size (),
-                                  "Centroid should have same dimensionality as instances.");
-            }
-        }
-        requireCondition (totalInstancesSSE > 0,
-                          "Run method should assign instances to clusters.");
+        runCaseResult runSSEK4Result;
+        std::cout << std::endl;
+        std::cout << "Testing run method with SSE and different k value" << std::endl;
+        start = std::chrono::high_resolution_clock::now ();
+        runSSEK4Result.name = "runMethodSSE_k4";
+        runSSEK4Result.k = 4;
+        runSSEK4Result.strategy = SSE;
+        runSSEK4Result.level = clusterProcessor.run (4, SSE);
+        end = std::chrono::high_resolution_clock::now ();
+        runSSEK4Result.durationMicros = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        duration = runSSEK4Result.durationMicros;
+        timings.push_back ({"runMethodSSEK4", duration});
+        requireRunLevelIntegrity (runSSEK4Result, rawDataset.data.size ());
 
         std::cout << std::endl;
         std::cout << "Testing run method with different k value" << std::endl;
         start = std::chrono::high_resolution_clock::now ();
-        dendrogramLevel resultK5 = clusterProcessor.run (5, ONE);
+        runCaseResult runK5Result;
+        runK5Result.name = "runMethodONE_k5";
+        runK5Result.k = 5;
+        runK5Result.strategy = ONE;
+        runK5Result.level = clusterProcessor.run (5, ONE);
         end = std::chrono::high_resolution_clock::now ();
-        duration = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        runK5Result.durationMicros = std::chrono::duration_cast<std::chrono::microseconds> (end - start).count ();
+        duration = runK5Result.durationMicros;
         timings.push_back ({"runMethodK5", duration});
+        requireRunLevelIntegrity (runK5Result, rawDataset.data.size ());
 
-        requireCondition (resultK5.clusters.size () == 5,
-                          "Run method with k=5 should produce exactly 5 clusters.");
-        requireCondition (!resultK5.interClusterDistances.empty (),
-                          "Run method should populate inter-cluster distances.");
+        std::cout << std::endl;
+        std::cout << "========================================" << std::endl;
+        std::cout << "       RUN LEVEL PRINTER OUTPUT         " << std::endl;
+        std::cout << "========================================" << std::endl;
+        std::cout << "Run: " << runOneResult.name << " | k=" << runOneResult.k << " | time(us)=" << runOneResult.durationMicros << std::endl;
+        clusterProcessor.printDendrogramLevel (runOneResult.level);
+        std::cout << std::endl;
 
-        size_t totalInstancesK5 = 0;
-        for (const auto &cluster : resultK5.clusters)
-        {
-            totalInstancesK5 += cluster.instances.size ();
-            if (!cluster.instances.empty ())
-            {
-                requireCondition (cluster.centroid.vectorizedInstance.size () == cluster.instances[0].vectorizedInstance.size (),
-                                  "Centroid should have same dimensionality as instances.");
-            }
-        }
-        requireCondition (totalInstancesK5 > 0,
-                          "Run method should assign instances to clusters.");
+        std::cout << "Run: " << runK1Result.name << " | k=" << runK1Result.k << " | time(us)=" << runK1Result.durationMicros << std::endl;
+        clusterProcessor.printDendrogramLevel (runK1Result.level);
+        std::cout << std::endl;
+
+        std::cout << "Run: " << runSSEResult.name << " | k=" << runSSEResult.k << " | time(us)=" << runSSEResult.durationMicros << std::endl;
+        clusterProcessor.printDendrogramLevel (runSSEResult.level);
+        std::cout << std::endl;
+
+        std::cout << "Run: " << runSSEK4Result.name << " | k=" << runSSEK4Result.k << " | time(us)=" << runSSEK4Result.durationMicros << std::endl;
+        clusterProcessor.printDendrogramLevel (runSSEK4Result.level);
+        std::cout << std::endl;
+
+        std::cout << "Run: " << runK5Result.name << " | k=" << runK5Result.k << " | time(us)=" << runK5Result.durationMicros << std::endl;
+        clusterProcessor.printDendrogramLevel (runK5Result.level);
+        std::cout << "========================================" << std::endl;
 
         std::cout << "Data preprocessing completed successfully." << std::endl;
 

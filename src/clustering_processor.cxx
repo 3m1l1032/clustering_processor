@@ -823,9 +823,18 @@ void ClusteringProcessor::calculateDistances (dendrogramLevel &level)
     double totalInterDistance = 0.0;
     size_t intraCount = 0;
     size_t interCount = 0;
+    std::vector<clusterComposition> iterationComposition;
 
     for (size_t i = 0; i < level.clusters.size (); i++)
     {
+        clusterComposition composition;
+        composition.clusterSize = level.clusters[i].instances.size ();
+
+        for (const auto &instance : level.clusters[i].instances)
+            composition.classCounts[instance.classLabel] += 1;
+
+        iterationComposition.push_back(composition);
+
         for (size_t j = i + 1; j < level.clusters.size (); j++)
         {
             totalInterDistance += getEuclideanDistance (level.clusters[i].centroid, level.clusters[j].centroid);
@@ -844,6 +853,7 @@ void ClusteringProcessor::calculateDistances (dendrogramLevel &level)
 
     level.interClusterDistances.push_back(interCount > 0 ? totalInterDistance / interCount : 0.0);
     level.intraClusterDistances.push_back(intraCount > 0 ? totalIntraDistance / intraCount : 0.0);
+    level.iterationClusterCompositions.push_back(iterationComposition);
 
     return;
 }
@@ -853,6 +863,36 @@ void ClusteringProcessor::calculateDistances (dendrogramLevel &level)
  ****************************************************************/
 void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) const
 {
+    const auto printClassCounts = [this](const std::map<std::string, size_t> &classCounts)
+    {
+        bool first = true;
+
+        for (const auto &classLabel : classAttribute.values)
+        {
+            if (!first)
+                std::cout << ", ";
+
+            const size_t count = classCounts.count (classLabel) > 0 ? classCounts.at (classLabel) : 0;
+            std::cout << classLabel << "=" << count;
+            first = false;
+        }
+
+        for (const auto &entry : classCounts)
+        {
+            if (std::find (classAttribute.values.begin (), classAttribute.values.end (), entry.first) == classAttribute.values.end ())
+            {
+                if (!first)
+                    std::cout << ", ";
+
+                std::cout << entry.first << "=" << entry.second;
+                first = false;
+            }
+        }
+
+        if (first)
+            std::cout << "(none)";
+    };
+
     std::cout << "Dendrogram Level with " << level.clusters.size () << " clusters:" << std::endl;
     for (size_t i = 0; i < level.clusters.size (); i++)
     {
@@ -863,38 +903,27 @@ void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) co
 
         std::cout << "  Cluster " << i + 1 << ": " << level.clusters[i].instances.size () << " instances";
         std::cout << " | class counts: ";
-
-        bool first = true;
-        for (const auto &classLabel : classAttribute.values)
-        {
-            if (!first)
-                std::cout << ", ";
-
-            const size_t count = classCounts.count (classLabel) > 0 ? classCounts[classLabel] : 0;
-            std::cout << classLabel << "=" << count;
-            first = false;
-        }
-
-        // Print labels not listed in classAttribute.values to keep output robust.
-        for (const auto &entry : classCounts)
-        {
-            if (std::find (classAttribute.values.begin (), classAttribute.values.end (), entry.first) == classAttribute.values.end ())
-            {
-                if (!first)
-                    std::cout << ", ";
-                std::cout << entry.first << "=" << entry.second;
-                first = false;
-            }
-        }
-
-        if (first)
-            std::cout << "(none)";
+        printClassCounts (classCounts);
 
         std::cout << std::endl;
     }
+
     for (size_t i = 0; i < level.interClusterDistances.size (); i++)
     {
         std::cout << "  Iteration " << i + 1 << ":" << std::endl;
+
+        if (i < level.iterationClusterCompositions.size ())
+        {
+            const auto &composition = level.iterationClusterCompositions[i];
+            for (size_t clusterIndex = 0; clusterIndex < composition.size (); clusterIndex++)
+            {
+                std::cout << "    Cluster " << clusterIndex + 1 << ": size=" << composition[clusterIndex].clusterSize;
+                std::cout << " | class counts: ";
+                printClassCounts (composition[clusterIndex].classCounts);
+                std::cout << std::endl;
+            }
+        }
+
         std::cout << "  Intra-cluster distance: " << level.intraClusterDistances[i] << std::endl;
         std::cout << "  Inter-cluster distance: " << level.interClusterDistances[i] << std::endl;
         if (i < level.SSEs.size ())

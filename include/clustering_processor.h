@@ -102,12 +102,19 @@ struct clusterInfo
     vectorizationInfo centroid;
 };
 
+struct clusterComposition
+{
+    size_t clusterSize;
+    std::map<std::string, size_t> classCounts;
+};
+
 struct dendrogramLevel
 {
     std::vector<clusterInfo> clusters;
     std::vector<double> interClusterDistances;
     std::vector<double> intraClusterDistances;
     std::vector<double> SSEs;
+    std::vector<std::vector<clusterComposition>> iterationClusterCompositions;
 };
 
 struct dendrogram

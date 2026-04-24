@@ -856,7 +856,41 @@ void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) co
     std::cout << "Dendrogram Level with " << level.clusters.size () << " clusters:" << std::endl;
     for (size_t i = 0; i < level.clusters.size (); i++)
     {
-        std::cout << "  Cluster " << i + 1 << ": " << level.clusters[i].instances.size () << " instances" << std::endl;
+        std::map<std::string, size_t> classCounts;
+
+        for (const auto &instance : level.clusters[i].instances)
+            classCounts[instance.classLabel] += 1;
+
+        std::cout << "  Cluster " << i + 1 << ": " << level.clusters[i].instances.size () << " instances";
+        std::cout << " | class counts: ";
+
+        bool first = true;
+        for (const auto &classLabel : classAttribute.values)
+        {
+            if (!first)
+                std::cout << ", ";
+
+            const size_t count = classCounts.count (classLabel) > 0 ? classCounts[classLabel] : 0;
+            std::cout << classLabel << "=" << count;
+            first = false;
+        }
+
+        // Print labels not listed in classAttribute.values to keep output robust.
+        for (const auto &entry : classCounts)
+        {
+            if (std::find (classAttribute.values.begin (), classAttribute.values.end (), entry.first) == classAttribute.values.end ())
+            {
+                if (!first)
+                    std::cout << ", ";
+                std::cout << entry.first << "=" << entry.second;
+                first = false;
+            }
+        }
+
+        if (first)
+            std::cout << "(none)";
+
+        std::cout << std::endl;
     }
     for (size_t i = 0; i < level.interClusterDistances.size (); i++)
     {

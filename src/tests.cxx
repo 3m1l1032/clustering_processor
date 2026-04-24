@@ -155,7 +155,7 @@ int main ()
         std::cout << "Clustering Processor Test File" << std::endl;
         std::cout << std::endl;
 
-        std::string filename = "data/adult-big.arff";
+        std::string filename = "data/adult-small.arff";
         ARFF rawDataset (filename);
 
         std::vector<std::pair<std::string, long long>> timings;

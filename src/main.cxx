@@ -40,6 +40,23 @@ size_t parseThreadCountArg (const std::string &arg)
     return static_cast<size_t> (std::stoul (value));
 }
 
+std::string formatDuration (long long microseconds)
+{
+    const long long totalMilliseconds = microseconds / 1000;
+    const long long minutes = totalMilliseconds / 60000;
+    const long long secondsPart = (totalMilliseconds / 1000) % 60;
+    const long long millisecondsPart = totalMilliseconds % 1000;
+    const double seconds = static_cast<double> (microseconds) / 1000000.0;
+
+    std::ostringstream out;
+    out << std::fixed << std::setprecision (3) << seconds << " s";
+    out << " (" << minutes << ":";
+    out << std::setw (2) << std::setfill ('0') << secondsPart << ".";
+    out << std::setw (3) << std::setfill ('0') << millisecondsPart << ")";
+
+    return out.str ();
+}
+
 ExperimentResult runOneExperiment (const ClusteringProcessor &preprocessedProcessor,
                                    size_t k,
                                    terminationStrategy strategy)
@@ -104,7 +121,7 @@ void printOneResult (const ExperimentResult &result)
     std::cout << "Strategy = " << (result.strategy == SSE ? "SSE" : "ONE") << std::endl;
     std::cout << "k = " << result.k << std::endl;
     std::cout << "Time (clustering only, no pre-processing): "
-              << result.runtimeMicroseconds << " us" << std::endl;
+              << formatDuration (result.runtimeMicroseconds) << std::endl;
     std::cout << "Final inter-cluster distance: " << result.finalInterDistance << std::endl;
     std::cout << "Final intra-cluster distance: " << result.finalIntraDistance << std::endl;
     std::cout << "Cluster size stats -> min: " << result.minClusterSize

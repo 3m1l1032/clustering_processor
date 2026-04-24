@@ -616,6 +616,12 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
     // choosing sqrt(n) for clustering
     shuffleDataInstances (vectorizedData, SEED);
 
+    if (vectorizedData.empty ())
+        throw std::invalid_argument("Cannot cluster an empty dataset.");
+
+    if (k == 0 || k > vectorizedData.size ())
+        throw std::invalid_argument("Invalid k value for clustering.");
+
     size_t randInstanceCount = floor(std::sqrt(vectorizedData.size ()));
 
     if (randInstanceCount < k)
@@ -633,7 +639,7 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         clusters.push_back(newCluster);
     }
 
-    while (clusterDendrogram.levels.empty () || clusterDendrogram.levels.back ().clusters.size () > 1)
+    while (clusters.size () > k)
     {
         double minDistance = std::numeric_limits<double>::max ();
         size_t mergeIndex1 = 0;
@@ -693,37 +699,17 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
         // Store the current level of the dendrogram
         dendrogramLevel level;
         level.clusters = clusters;
-
-        // Calculate inter-cluster and intra-cluster distances for the current level
-        for (size_t i = 0; i < clusters.size (); i++)
-        {
-            for (size_t j = i + 1; j < clusters.size (); j++)
-            {
-                double distance = getEuclideanDistance (clusters[i].centroid, clusters[j].centroid);
-                level.interClusterDistances.push_back(distance);
-            }
-            double intraDistances = 0.0;
-            for (size_t m = 0; m < clusters[i].instances.size (); m++)
-            {
-                for (size_t n = m + 1; n < clusters[i].instances.size (); n++)
-                {
-                    intraDistances += getEuclideanDistance (clusters[i].instances[m], clusters[i].instances[n]);
-                }
-                intraDistances /= (clusters[i].instances.size () * (clusters[i].instances.size () - 1)) / 2;
-            }
-            level.intraClusterDistances.push_back(intraDistances);
-        }
+        calculateDistances (level);
         clusterDendrogram.levels.push_back(level);
     }
 
     // k-means clustering
     // Approach A (and step one of Approach B)
     dendrogramLevel kMeansLevel;
-    for (const auto &level : clusterDendrogram.levels)
-    {
-        if (level.clusters.size () == k)
-            kMeansLevel = level;
-    }
+    if (!clusterDendrogram.levels.empty ())
+        kMeansLevel = clusterDendrogram.levels.back ();
+    else
+        kMeansLevel.clusters = clusters;
 
     for (size_t i = randInstanceCount; i < vectorizedData.size (); i++)
     {
@@ -754,18 +740,47 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
     double SSEChange = std::numeric_limits<double>::max ();
     while (SSEChange > SSE_TERMINATION_THRESHOLD)
     {
-        // Clear instances before reassigning
+        std::vector<vectorizationInfo> previousCentroids;
+        for (const auto &cluster : kMeansLevel.clusters)
+            previousCentroids.push_back(cluster.centroid);
+
         for (auto &cluster : kMeansLevel.clusters)
             cluster.instances.clear();
 
-        for (auto &cluster : kMeansLevel.clusters)
+        for (size_t i = 0; i < vectorizedData.size (); i++)
         {
+            const vectorizationInfo &instance = vectorizedData[i];
+            double minDistance = std::numeric_limits<double>::max ();
+            size_t closestClusterIndex = 0;
+
+            for (size_t clusterIndex = 0; clusterIndex < kMeansLevel.clusters.size (); clusterIndex++)
+            {
+                double distance = getEuclideanDistance (instance, previousCentroids[clusterIndex]);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    closestClusterIndex = clusterIndex;
+                }
+            }
+
+            kMeansLevel.clusters[closestClusterIndex].instances.push_back(instance);
+        }
+
+        for (size_t clusterIndex = 0; clusterIndex < kMeansLevel.clusters.size (); clusterIndex++)
+        {
+            auto &cluster = kMeansLevel.clusters[clusterIndex];
+
+            if (cluster.instances.empty ())
+            {
+                cluster.centroid = previousCentroids[clusterIndex];
+                continue;
+            }
+
             vectorizationInfo newCentroid;
             std::map<std::string, double> classCounts;
             for (const auto &instance : cluster.instances)
-            {
                 classCounts[instance.classLabel] += 1.0;
-            }
+
             size_t maxCount = 0;
             for (const auto &entry : classCounts)
             {
@@ -776,35 +791,15 @@ dendrogramLevel ClusteringProcessor::run (size_t k, terminationStrategy termStra
                 }
             }
 
-            for (size_t featureIndex = 0; featureIndex < cluster.centroid.vectorizedInstance.size (); featureIndex++)
+            for (size_t featureIndex = 0; featureIndex < cluster.instances[0].vectorizedInstance.size (); featureIndex++)
             {
                 double sumFeatureValue = 0.0;
                 for (const auto &instance : cluster.instances)
-                {
                     sumFeatureValue += instance.vectorizedInstance[featureIndex];
-                }
                 newCentroid.vectorizedInstance.push_back(sumFeatureValue / cluster.instances.size ());
             }
+
             cluster.centroid = newCentroid;
-        }
-
-        for (size_t i = 0; i < vectorizedData.size (); i++)
-        {
-            const vectorizationInfo &instance = vectorizedData[i];
-            double minDistance = std::numeric_limits<double>::max ();
-            size_t closestClusterIndex = 0;
-
-            for (size_t clusterIndex = 0; clusterIndex < kMeansLevel.clusters.size (); clusterIndex++)
-            {
-                double distance = getEuclideanDistance (instance, kMeansLevel.clusters[clusterIndex].centroid);
-                if (distance < minDistance)
-                {
-                    minDistance = distance;
-                    closestClusterIndex = clusterIndex;
-                }
-            }
-
-            kMeansLevel.clusters[closestClusterIndex].instances.push_back(instance);
         }
 
         double newSSE = getSSE (kMeansLevel.clusters);
@@ -865,7 +860,7 @@ void ClusteringProcessor::printDendrogramLevel (const dendrogramLevel &level) co
         std::cout << "  Iteration " << i + 1 << ":" << std::endl;
         std::cout << "  Intra-cluster distance: " << level.intraClusterDistances[i] << std::endl;
         std::cout << "  Inter-cluster distance: " << level.interClusterDistances[i] << std::endl;
-        if (!level.SSEs.empty ())
+        if (i < level.SSEs.size ())
             std::cout << "  SSE: " << level.SSEs[i] << std::endl;
     }
 

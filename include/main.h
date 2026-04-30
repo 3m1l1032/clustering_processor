@@ -5,7 +5,7 @@
  * 
  * Created for Georgetown University Data Mining COSC 3590, Spring 2026.
  * 
- * Hours spent on this interface: 0 hours.
+ * Hours spent on this interface: 1 hours.
  */
 
 #ifndef MAIN_H
